@@ -1,0 +1,7 @@
+name: RegenTheWorld
+main: com.robomwm.regentheworld.RegenTheWorld
+api-version: 1.13
+author: RoboMWM
+depend: [GriefPrevention]
+version: ${project.version}
+website: https://github.com/robomwm
