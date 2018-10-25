@@ -69,8 +69,10 @@ public class RegenTheWorld extends JavaPlugin implements Listener
                 Chunk chunk = chunksToRegen.poll();
                 if (chunk == null)
                     return;
-                chunk.getWorld().regenerateChunk(chunk.getX(), chunk.getZ());
-                getLogger().info("Regenerated chunk " + chunk.getX() + " " + chunk.getZ());
+                if (chunk.getWorld().regenerateChunk(chunk.getX(), chunk.getZ()))
+                    getLogger().info("Regenerated chunk " + chunk.getX() + " " + chunk.getZ());
+                else
+                    getLogger().warning("Failed to regenerate chunk " + chunk.getX() + " " + chunk.getZ());
             }
         }.runTaskTimer(this, 20L, 2L);
 
