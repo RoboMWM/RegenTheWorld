@@ -11,9 +11,13 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 
 /**
@@ -25,12 +29,14 @@ public class RegenTheWorld extends JavaPlugin implements Listener
 {
     private DataStore dataStore;
     private Set<World> enabledWorlds = new HashSet<>();
+    private Map<World, Set<Long>> regenedChunks = new HashMap<>();
+    private Queue<Chunk> chunksToRegen = new ArrayDeque<>();
 
     public void onEnable()
     {
-        getConfig().options().header("autoLoadChunksToRegen: whether to load chunks to regen them automatically, or only perform when chunks are loaded by other means.\n" +
+        getConfig().options().header("autoLoadChunksToRegen: whether to load chunks to regen them automatically, or only perform when chunks are loaded by other means. Chunks are loaded from either the worldborder center or the world spawn, and spiral outwards. This feature _should_ avoid generating chunks.\n" +
                 "radiusToLoadInChunks: How far autoLoadChunksToRegen should load chunks automatically. Defaults to vanilla /worldborder if less than 0.\n" +
-                "chunkLoadRate: How many chunks to automatically load per tick.");
+                "chunkLoadRate: How many chunks to automatically load per second.");
         getConfig().addDefault("autoLoadChunksToRegen", false);
         getConfig().addDefault("radiusToLoadInChunks", -1);
         getConfig().addDefault("chunkLoadRate", 1);
@@ -48,6 +54,25 @@ public class RegenTheWorld extends JavaPlugin implements Listener
         for (String worldName : getConfig().getStringList("enabledWorlds"))
             enabledWorlds.add(getServer().getWorld(worldName));
         enabledWorlds.remove(null);
+
+        //This got a bit messy
+        //This just initializes the "regenedChunks" map with the worlds so no containsKey needs to be called.
+        for (World world : enabledWorlds)
+            regenedChunks.put(world, new HashSet<>());
+
+        //regen task
+        new BukkitRunnable()
+        {
+            @Override
+            public void run()
+            {
+                Chunk chunk = chunksToRegen.poll();
+                if (chunk == null)
+                    return;
+                chunk.getWorld().regenerateChunk(chunk.getX(), chunk.getZ());
+                getLogger().info("Regenerated chunk " + chunk.getX() + " " + chunk.getZ());
+            }
+        }.runTaskTimer(this, 20L, 2L);
 
         if (!getConfig().getBoolean("autoLoadChunksToRegen"))
             return;
@@ -139,7 +164,7 @@ public class RegenTheWorld extends JavaPlugin implements Listener
                         stage++;
                     }
                 }
-            }.runTaskTimerAsynchronously(this, 20L, 1L);
+            }.runTaskTimerAsynchronously(this, 20L, 20L);
         }
 
 
@@ -159,17 +184,25 @@ public class RegenTheWorld extends JavaPlugin implements Listener
         Chunk chunk = event.getChunk();
         if (!enabledWorlds.contains(chunk.getWorld()))
             return;
+
+        long chunkKey = Chunk.getChunkKey(chunk.getX(), chunk.getZ());
+        if (regenedChunks.get(event.getWorld()).contains(chunkKey))
+            return;
+
         if (!dataStore.getClaims(chunk.getX(), chunk.getZ()).isEmpty())
             return;
 
-        new BukkitRunnable()
-        {
-            @Override
-            public void run()
-            {
-                chunk.getWorld().regenerateChunk(chunk.getX(), chunk.getZ());
-                //pendingTasks--;
-            }
-        }.runTask(this); // runTaskLater(this, ++pendingTasks);
+        chunksToRegen.add(chunk);
+        regenedChunks.get(event.getWorld()).add(chunkKey);
+
+//        new BukkitRunnable()
+//        {
+//            @Override
+//            public void run()
+//            {
+//                chunk.getWorld().regenerateChunk(chunk.getX(), chunk.getZ());
+//                //pendingTasks--;
+//            }
+//        }.runTask(this); // runTaskLater(this, ++pendingTasks);
     }
 }
